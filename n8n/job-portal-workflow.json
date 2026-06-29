@@ -1,0 +1,154 @@
+{
+  "name": "Job Portal — register / new-jobs / apply / tailored-resume / delete-account",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "job-portal",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-entry",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "job-portal"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.body.type}}",
+        "rules": {
+          "rules": [
+            { "value2": "register", "output": 0 },
+            { "value2": "new-jobs", "output": 1 },
+            { "value2": "apply", "output": 2 },
+            { "value2": "tailored-resume", "output": 3 },
+            { "value2": "delete-account", "output": 4 }
+          ]
+        }
+      },
+      "id": "switch-type",
+      "name": "Route by type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": "https://docs.google.com/spreadsheets/d/1GBJZrxK6omQb0AQzpJ9uJwXU46IVlaazUGA_UUIOWA0/edit?gid=0#gid=0",
+        "sheetName": "Users",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": { "email": "={{$json.body.email}}" }
+        }
+      },
+      "id": "sheet-register",
+      "name": "Save user to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [780, 100]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": "https://docs.google.com/spreadsheets/d/1GBJZrxK6omQb0AQzpJ9uJwXU46IVlaazUGA_UUIOWA0/edit?gid=0#gid=0",
+        "sheetName": "Users"
+      },
+      "id": "sheet-read-users",
+      "name": "Read all users",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [780, 260]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "10 new jobs picked for you",
+        "emailType": "html",
+        "message": "=<h2>Fresh jobs just landed</h2><p>Here are the latest roles in your portal:</p><ul>{{ $node['Webhook'].json.body.jobs.map(j => `<li><b>${j.title}</b> at ${j.company} — <a href='${j.applyUrl}'>Apply</a></li>`).join('') }}</ul><p>Open the dashboard to see all {{$node['Webhook'].json.body.total}} jobs.</p>"
+      },
+      "id": "email-new-jobs",
+      "name": "Email new jobs",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1040, 260]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.body.email}}",
+        "subject": "=Application started: {{$json.body.jobTitle}} at {{$json.body.company}}",
+        "emailType": "html",
+        "message": "=<p>You started an application for <b>{{$json.body.jobTitle}}</b> at <b>{{$json.body.company}}</b>.</p><p>Continue here: <a href='{{$json.body.applyUrl}}'>{{$json.body.applyUrl}}</a></p>"
+      },
+      "id": "email-apply",
+      "name": "Email apply confirmation",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [780, 420]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.body.email}}",
+        "subject": "=Your tailored resume for {{$json.body.jobTitle}}",
+        "emailType": "html",
+        "message": "=<p>Here's your AI-tailored resume for <b>{{$json.body.jobTitle}}</b> at <b>{{$json.body.company}}</b>:</p><pre style='font-family:ui-monospace,monospace;white-space:pre-wrap'>{{$json.body.resumeContent}}</pre>"
+      },
+      "id": "email-tailored",
+      "name": "Email tailored resume",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [780, 580]
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "documentId": "https://docs.google.com/spreadsheets/d/1GBJZrxK6omQb0AQzpJ9uJwXU46IVlaazUGA_UUIOWA0/edit?gid=0#gid=0",
+        "sheetName": "Users",
+        "matchBy": "keyColumn",
+        "keyColumn": "email",
+        "valueToMatch": "={{$node['Webhook'].json.body.email}}"
+      },
+      "id": "sheet-delete",
+      "name": "Delete user from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4,
+      "position": [780, 740]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$node['Webhook'].json.body.email}}",
+        "subject": "Account Deleted Successfully",
+        "emailType": "html",
+        "message": "=<p>Your job portal account has been successfully deleted.</p><p>We are sorry to see you go! All your saved records have been cleared from our databases.</p>"
+      },
+      "id": "email-delete",
+      "name": "Email deletion confirmation",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [1040, 740]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Route by type", "type": "main", "index": 0 }]]
+    },
+    "Route by type": {
+      "main": [
+        [{ "node": "Save user to Sheet", "type": "main", "index": 0 }],
+        [{ "node": "Read all users", "type": "main", "index": 0 }],
+        [{ "node": "Email apply confirmation", "type": "main", "index": 0 }],
+        [{ "node": "Email tailored resume", "type": "main", "index": 0 }],
+        [{ "node": "Delete user from Sheet", "type": "main", "index": 0 }]
+      ]
+    },
+    "Read all users": {
+      "main": [[{ "node": "Email new jobs", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "1"
+}
